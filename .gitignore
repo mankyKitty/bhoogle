@@ -1,2 +1,6 @@
 .stack-work/
+dist*
+.ghc.environment.*
+result
+cabal.project.local*
 *#*.hs#

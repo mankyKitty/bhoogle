@@ -124,9 +124,15 @@ runBHoogle dbPath = do
                       , _yankCommand = Map.findWithDefault "xclip" "yank" settings
                       , _yankArgs = Map.findWithDefault "" "yankArgs" settings
                       }
-          
+
+  vty0 <- V.mkVty V.defaultConfig
   -- And run brick
-  void $ B.customMain (V.mkVty V.defaultConfig) (Just chan) app st
+  void $ B.customMain
+    vty0
+    (V.mkVty V.defaultConfig)
+    (Just chan)
+    app
+    st
 
   where
     -- | Get the local time
