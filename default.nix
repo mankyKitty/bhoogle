@@ -10,4 +10,4 @@ let
 
   drv = haskPkgs.callPackage ./bhoogle.nix {};
 in
-  pkgs.haskell.lib.shellAware drv0
+  pkgs.haskell.lib.shellAware drv
