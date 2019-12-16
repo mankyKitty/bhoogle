@@ -8,6 +8,7 @@ module Main where
 import           Protolude
 import           Control.Lens ((^.), (.~), (%~))
 import           Control.Lens.TH (makeLenses)
+import Data.String (String)
 import qualified Data.Map as Map
 import qualified Data.List as Lst
 import qualified Data.Time as Tm
@@ -29,6 +30,7 @@ import qualified Graphics.Vty as V
 import qualified Graphics.Vty.Input.Events as K
 import           System.FilePath ((</>))
 import qualified System.Directory as Dir
+import qualified System.Environment as E
 import qualified Hoogle as H
 import qualified System.Process.Typed as PT
 import qualified Data.ByteString.Lazy as BSL
@@ -52,17 +54,18 @@ data SortBy = SortNone
 
 
 -- | State of the brick app. Contains the controls and any other required state
-data BrickState = BrickState { _stEditType :: !(BE.Editor Text Name)      -- ^ Editor for the type to search for
-                             , _stEditText :: !(BE.Editor Text Name)      -- ^ Editor for a text search in the results
-                             , _stTime :: !Tm.LocalTime                   -- ^ The current time
-                             , _stFocus :: !(BF.FocusRing Name)           -- ^ Focus ring - a circular list of focusable controls
-                             , _stResults :: [H.Target]                   -- ^ The last set of search results from hoohle
-                             , _stResultsList :: !(BL.List Name H.Target) -- ^ List for the search results
-                             , _stSortResults :: SortBy                   -- ^ Current sort order for the results
-                             , _stDbPath :: FilePath                      -- ^ Hoogle DB path
-                             , _yankCommand :: Text                       -- ^ Command to run to copy text to the clipboard 
-                             , _yankArgs :: Text                          -- ^ Args for the yank command
-                             }
+data BrickState = BrickState
+  { _stEditType :: !(BE.Editor Text Name)      -- ^ Editor for the type to search for
+  , _stEditText :: !(BE.Editor Text Name)      -- ^ Editor for a text search in the results
+  , _stTime :: !Tm.LocalTime                   -- ^ The current time
+  , _stFocus :: !(BF.FocusRing Name)           -- ^ Focus ring - a circular list of focusable controls
+  , _stResults :: [H.Target]                   -- ^ The last set of search results from hoohle
+  , _stResultsList :: !(BL.List Name H.Target) -- ^ List for the search results
+  , _stSortResults :: SortBy                   -- ^ Current sort order for the results
+  , _stDbPath :: FilePath                      -- ^ Hoogle DB path
+  , _yankCommand :: Text                       -- ^ Command to run to copy text to the clipboard 
+  , _yankArgs :: Text                          -- ^ Args for the yank command
+  }
 
 makeLenses ''BrickState
 
@@ -76,13 +79,18 @@ app = B.App { B.appDraw = drawUI
             , B.appAttrMap = const theMap
             }
 
+handleArgs :: [String] -> Maybe FilePath
+handleArgs ["--database", fp] = Just fp
+handleArgs _ = Nothing
 
 main :: IO ()
 main = do
   -- Use the default hoogle DB. This may not exist because
   --  1) hoogle generate was never called
   --  2) the system hoogle is a different version from the package used here
-  dbPath <- H.defaultDatabaseLocation
+  defaultDbPath <- H.defaultDatabaseLocation
+  givenDbPath <- handleArgs <$> E.getArgs
+  let dbPath = fromMaybe defaultDbPath givenDbPath
   Dir.doesFileExist dbPath >>= \case
     True -> runBHoogle dbPath
     False -> do
@@ -206,7 +214,7 @@ handleEvent st ev =
                 K.KChar 's' ->
                   -- Toggle the search order between ascending and descending, use asc if sort order was 'none'
                   let sortDir = if (st ^. stSortResults) == SortAsc then SortDec else SortAsc in
-                  let sorter = if sortDir == SortDec then (Lst.sortBy $ flip compareType) else (Lst.sortBy compareType) in
+                  let sorter = if sortDir == SortDec then Lst.sortBy $ flip compareType else Lst.sortBy compareType in
                   B.continue . filterResults $ st & stResults %~ sorter
                                                   & stSortResults .~ sortDir
                 K.KChar 'p' -> do
@@ -248,13 +256,11 @@ yank getText st selected =
 
 
 yankPackage :: BrickState -> Maybe (Int, H.Target) -> IO BrickState
-yankPackage st selected = 
-  yank (\t -> Txt.pack . fst <$> H.targetPackage t) st selected
+yankPackage = yank (fmap (Txt.pack . fst) . H.targetPackage)
 
 
 yankModule :: BrickState -> Maybe (Int, H.Target) -> IO BrickState
-yankModule st selected = 
-  yank (\t -> Txt.pack . fst <$> H.targetModule t) st selected
+yankModule = yank (fmap (Txt.pack . fst) . H.targetModule)
 
 
 -- | Search ahead for type strings longer than 3 chars.
@@ -283,7 +289,7 @@ filterResults st =
   let results =
         if Txt.null filterText
         then allResults
-        else filter (\t -> Txt.isInfixOf filterText . Txt.toLower $ formatResult t) allResults
+        else filter (Txt.isInfixOf filterText . Txt.toLower . formatResult) allResults
   in
   st & stResultsList .~ BL.list ListResults (Vec.fromList results) 1
   
@@ -295,18 +301,16 @@ drawUI st =
 
   where
     contentBlock =
-      (B.withBorderStyle BBS.unicode $ BB.border searchBlock)
+      B.withBorderStyle BBS.unicode (BB.border searchBlock)
       <=>
       B.padTop (B.Pad 1) resultsBlock
       
     resultsBlock =
       let total = show . length $ st ^. stResults in
       let showing = show . length $ st ^. stResultsList ^. BL.listElementsL in
-      (B.withAttr "infoTitle" $ B.txt "Results: ") <+> B.txt (showing <> "/" <> total)
+      B.withAttr "infoTitle" (B.txt "Results: ") <+> B.txt (showing <> "/" <> total)
       <=>
-      (B.padTop (B.Pad 1) $
-       resultsContent <+> resultsDetail
-      )
+      B.padTop (B.Pad 1) (resultsContent <+> resultsDetail)
 
     resultsContent =
       BL.renderList (\_ e -> B.txt $ formatResult e) False (st ^. stResultsList)
@@ -316,11 +320,11 @@ drawUI st =
       B.hLimit 60 $
       vtitle "package:"
       <=>
-      B.padLeft (B.Pad 2) (B.txt $ getSelectedDetail (\t -> maybe "" (Txt.pack . fst) (H.targetPackage t)))
+      B.padLeft (B.Pad 2) (B.txt $ getSelectedDetail (maybe "" (Txt.pack . fst) . H.targetPackage))
       <=>
       vtitle "module:"
       <=>
-      B.padLeft (B.Pad 2) (B.txt $ getSelectedDetail (\t -> maybe "" (Txt.pack . fst) (H.targetModule t)))
+      B.padLeft (B.Pad 2) (B.txt $ getSelectedDetail (maybe "" (Txt.pack . fst) . H.targetModule))
       <=>
       vtitle "docs:"
       <=>
@@ -375,7 +379,7 @@ theMap = BA.attrMap V.defAttr [ (BE.editAttr        , V.black `B.on` V.cyan)
 
 getFiles :: FilePath -> IO [FilePath]
 getFiles p = do
-  entries <- (p </>) <<$>> (Dir.listDirectory p)
+  entries <- (p </>) <<$>> Dir.listDirectory p
   filterM Dir.doesFileExist entries
 
 ----------------------------------------------------------------------------------------------
@@ -395,7 +399,7 @@ searchHoogle path f =
 formatResult :: H.Target -> Text
 formatResult t =
   let typ = clean $ H.targetItem t in
-  let m = (clean . fst) <$> H.targetModule t in
+  let m = clean . fst <$> H.targetModule t in
   Txt.pack $ fromMaybe "" m <> " :: " <> typ
   
 

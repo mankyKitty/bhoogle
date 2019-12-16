@@ -16,7 +16,7 @@ extra-source-files:  README.md
 executable bhoogle
   hs-source-dirs:      app
   main-is:             Main.hs
-  ghc-options:         -threaded -rtsopts -with-rtsopts=-N -Wall -Wincomplete-uni-patterns -Wincomplete-record-updates -Wimplicit-prelude
+  ghc-options:         -threaded -O2 -rtsopts -with-rtsopts=-N -Wall -Wincomplete-uni-patterns -Wincomplete-record-updates -Wimplicit-prelude
   build-depends:       base >= 4.9.1.0 && <5
                      , protolude >= 0.2.2 && < 0.2.5
                      , text >= 1.2.3.0 && < 1.2.5.0
