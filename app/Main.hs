@@ -310,7 +310,9 @@ drawUI st =
       let showing = show . length $ st ^. stResultsList ^. BL.listElementsL in
       B.withAttr "infoTitle" (B.txt "Results: ") <+> B.txt (showing <> "/" <> total)
       <=>
-      B.padTop (B.Pad 1) (resultsContent <+> resultsDetail)
+      B.padTop (B.Pad 1) resultsContent
+      <=>
+      B.padTop (B.Pad 1) resultsDetail
 
     resultsContent =
       BL.renderList (\_ e -> B.txt $ formatResult e) False (st ^. stResultsList)
