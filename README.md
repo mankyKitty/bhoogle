@@ -36,3 +36,15 @@ Eg:
 
 
 Note that the version described in the [blog](http://www.andrevdm.com/posts/2018-01-15-bhoogle.html) is on the [blog](https://github.com/andrevdm/bhoogle/tree/blog) branch.
+
+### Scummy run script.
+
+This picks up the hoogle DB for the `withHoogle` enabled nix-shell you happen to be in.
+
+```sh
+#!/usr/bin/env bash
+
+DB=$(cat $(which hoogle) | grep exec | awk '{ print $5 }')
+
+<path to>/bhoogle --database "${DB}"
+```
